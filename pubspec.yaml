@@ -1,0 +1,8 @@
+name: terminal.dart
+version: 0.0.1
+description: Linux Terminal Emulator
+dependencies:
+  browser: any
+  sprintf: any
+dev_dependencies:
+#  unittest: any

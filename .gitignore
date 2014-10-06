@@ -10,5 +10,9 @@ packages/
 *.js.deps
 *.js.map
 
+# Idea files
+*.iml
+.idea
 # Include when developing application packages.
 pubspec.lock
+web/test.dart
