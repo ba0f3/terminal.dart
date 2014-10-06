@@ -1,4 +1,4 @@
-import 'terminal.dart';
+part of terminal;
 
 class Cycle {
   var _data = new List<Terminal>();

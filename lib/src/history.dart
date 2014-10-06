@@ -1,14 +1,13 @@
-import 'dart:html';
-import 'dart:convert';
+part of terminal;
 
-class History {
+class HistoryManager {
   bool _enabled = true;
   String storage_key = 'commands';
   int _size = 0;
   List<String> _data;
   int pos;
 
-  History({String name: '', int size: 0}) {
+  HistoryManager({String name: '', int size: 0}) {
     if(name != '') storage_key= name + '_commands';
     if(size > 0) _size = size;
 

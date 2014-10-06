@@ -1,4 +1,4 @@
-import 'terminal.dart';
+part of terminal;
 
 class Stack {
   var _data = new List<Interpreter>();

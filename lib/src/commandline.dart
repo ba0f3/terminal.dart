@@ -1,8 +1,4 @@
-import 'dart:html';
-import 'dart:async';
-import 'terminal.dart';
-import 'history.dart';
-import 'utils.dart';
+part of terminal;
 
 class CommandLine {
   var _root = new DivElement();
@@ -14,21 +10,19 @@ class CommandLine {
   String reverse_search_string = '';
   int reverse_search_position = null;
   String backup_prompt;
-  bool mask = false;
+  bool _mask = false;
   String command = '';
   String selected_text = ''; // text from selection using CTRL+SHIFT+C (as in Xterm)
   String kill_text = ''; // text from command that kill part of the command
   int _position = 0;
-  dynamic prompt;
+  dynamic _prompt;
   bool enabled = true;
   int historySize = 60;
   String _name;
-  History history;
+  HistoryManager history;
   SpanElement _cursor;
 
   Map<String, dynamic> _options;
-
-
 
   CommandLine(Map<String, dynamic> options) {
     _root.classes.add('cmd');
@@ -41,8 +35,47 @@ class CommandLine {
 
     if(options.containsKey('width')) _root.clientWidth = options['width'];
     if(options.containsKey('historySize')) historySize = options['historySize'];
-    if(options.containsKey('mask')) mask = options['mask'];
+    if(options.containsKey('mask')) _mask = options['mask'];
     if(options.containsKey('enabled')) enabled = options['enabled'];
+
+    name(options.containsKey('name') ? options['name'] : options.containsKey('prompt') ? options['prompt'] : '');
+    _prompt = options.containsKey('prompt') ? options['prompt'] : '> ';
+    draw_prompt();
+    if(options.containsKey('enabled') && options['enabled'] == true) {
+      enable();
+    }
+    window.onKeyPress.listen((KeyboardEvent event){
+      bool result = false;
+      if(event.ctrlKey && event.which == 99) { // Ctrl + C
+        result = true;
+      }
+
+      if (!reverse_search && options['keypress'] is Function) {
+        result = options['keypress'](event);
+      }
+
+      if (result) {
+        if (enabled) {
+          if ($.inArray(e.which, [38, 13, 0, 8]) > -1 && e.keyCode != 123 && // for F12 which === 0
+          !(e.which == 38 && e.shiftKey)) {
+            return false;
+          } else if (!e.ctrlKey && !(e.altKey && e.which == 100) || e.altKey) { // ALT+D
+            // TODO: this should be in one statement
+            if (reverse_search) {
+              reverse_search_string += String.fromCharCode(e.which);
+              reverse_history_search();
+              draw_reverse_prompt();
+            } else {
+              insert(String.fromCharCode(e.which));
+            }
+            return false;
+          }
+        }
+      } else {
+        return result;
+      }
+    });
+    window.onKeyDown.listen(keydown_event);
   }
 
   void animation(bool toggle) {
@@ -65,7 +98,7 @@ class CommandLine {
    * Set prompt for reverse search
    */
   void draw_reverse_prompt() {
-    prompt = "(reverse-i-search)`" + reverse_search_string + "': ";
+    _prompt = "(reverse-i-search)`" + reverse_search_string + "': ";
     draw_prompt();
   }
 
@@ -73,7 +106,7 @@ class CommandLine {
    * Disable reverse search
    */
   void clear_reverse_state() {
-    prompt = backup_prompt;
+    _prompt = backup_prompt;
     reverse_search = false;
     reverse_search_position = null;
     reverse_search_string = '';
@@ -184,7 +217,7 @@ class CommandLine {
     //
     // main logic starts here
     //
-    String str = mask ? command.replaceAll('.*', '*') : command;
+    String str = _mask ? command.replaceAll('.*', '*') : command;
     _root.querySelector('div').remove();
     before.setInnerHtml('');
 
@@ -315,9 +348,9 @@ class CommandLine {
       prompt_len = skipFormattingCount(prompt);
       prompt_node.setInnerHtml(Terminal.format(Terminal.encode(prompt)));
     }
-    if(prompt is String) {
-      set(prompt);
-    } else if(prompt is Function) {
+    if(_prompt is String) {
+      set(_prompt);
+    } else if(_prompt is Function) {
       prompt(set);
     }
   }
@@ -331,7 +364,7 @@ class CommandLine {
   }
 
   bool first_up_history = true;
-  bool keydown_event(KeyEvent e) {
+  bool keydown_event(KeyboardEvent e) {
     bool result;
     int pos, len;
     if (_options['keydown'] is Function) {
@@ -371,7 +404,7 @@ class CommandLine {
         if (e.shiftKey) {
           self.insert('\n');
         } else {
-          if (history && command && !mask &&
+          if (history && command && !_mask &&
             ((_options['historyFilter'] is Function &&
             _options['historyFilter'](command)) || !_options['historyFilter'])) {
               history.append(command);
@@ -382,7 +415,7 @@ class CommandLine {
           if (_options['commands']) {
             _options['commands'](tmp);
           }
-          if (prompt is Function) {
+          if (_prompt is Function) {
             draw_prompt();
           }
         }
@@ -455,7 +488,7 @@ class CommandLine {
         if (reverse_search) {
           reverse_history_search(true);
         } else {
-          backup_prompt = prompt;
+          backup_prompt = _prompt;
           draw_reverse_prompt();
           last_command = command;
           command = '';
@@ -464,7 +497,7 @@ class CommandLine {
         }
       } else if (e.which == 71 && e.ctrlKey) { // CTRL+G
         if (reverse_search) {
-          prompt = backup_prompt;
+          _prompt = backup_prompt;
           draw_prompt();
           command = last_command;
           redraw();
@@ -591,12 +624,12 @@ class CommandLine {
     }
   }
 
-  var history_list = new List<History>();
+  var history_list = new List<HistoryManager>();
   String name(String str) {
     if(str != '') {
       _name = str;
       bool enabled = history && history.enabled() || !history;
-      history = new History(str, historySize);
+      history = new HistoryManager(str, historySize);
       if (!enabled) {
         history.disable();
       }
@@ -615,7 +648,7 @@ class CommandLine {
       }
     }
   }
-  void insert(String str, bool stay) {
+  void insert(String str, {bool stay: true}) {
     if (position == command.length) {
       command += str;
     } else if (position == 0) {
@@ -656,20 +689,63 @@ class CommandLine {
     self.removeClass('cmd').removeData('cmd');
   }
 
-  prompt: function(user_prompt) {
-    if (user_prompt === undefined) {
-      return prompt;
+  void prompt(dynamic user_prompt) {
+    if (user_prompt == undefined) {
+      return _prompt;
     } else {
-      if (typeof user_prompt === 'string' ||
-      typeof user_prompt === 'function') {
-        prompt = user_prompt;
+      if (user_prompt is String || user_prompt is Function) {
+        _prompt = user_prompt;
       } else {
         throw 'prompt must be a function or string';
       }
       draw_prompt();
       // we could check if command is longer then numchars-new prompt
       redraw();
-      return self;
     }
-  },
+  }
+  num position(num n) {
+    if (n is num) {
+      _position = n < 0 ? 0 : n > command.length ? command.length : n;
+      redraw();
+    }
+    return _position;
+  }
+
+  void visible() {
+    _root.style.visibility = 'visible';
+    redraw();
+    draw_prompt();
+  }
+
+  void show() {
+    _root.hidden(false);
+    redraw();
+    draw_prompt();
+  }
+
+  void resize(num n) {
+    if(n) {
+      num_chars = n;
+    } else {
+      change_num_chars();
+    }
+    redraw();
+  }
+  void enable() {
+    enabled = true;
+    animation(true);
+  }
+
+  void disable() {
+    enabled = false;
+    animation(false);
+  }
+
+  bool mask(bool display) {
+    _mask = display;
+    redraw();
+
+    return _mask;
+  }
+
 }
